@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { useFinOpsStore } from "./useFinOpsStore";
@@ -53,7 +53,7 @@ describe("API key management page", () => {
     ["/routing", "路由策略"],
     ["/approvals", "审批"],
     ["/settings", "设置"]
-  ])("renders the placeholder page for %s", (path, heading) => {
+  ])("renders the page for %s", (path, heading) => {
     window.history.pushState({}, "", path);
 
     render(<App />);
@@ -99,7 +99,7 @@ describe("API key management page", () => {
     expect(container.querySelector(".sidebar")?.className).not.toContain("open");
   });
 
-  it("creates a key with only a name and shows the one-time secret", () => {
+  it("creates a key with only a name and shows the one-time secret", async () => {
     render(<App />);
 
     openApiKeyPage();
@@ -108,9 +108,9 @@ describe("API key management page", () => {
     fireEvent.change(screen.getByLabelText("API Key 名称"), { target: { value: "Notebook Agent" } });
     fireEvent.click(screen.getByRole("button", { name: "创建并显示 Key" }));
 
-    expect(screen.getByText("Notebook Agent")).toBeInTheDocument();
-    expect(screen.getByText("只显示一次，请立即复制保存。")).toBeInTheDocument();
-    const oneTimeKey = screen.getByText("只显示一次，请立即复制保存。").closest(".one-time-key");
+    expect(await screen.findByText("Notebook Agent")).toBeInTheDocument();
+    expect(screen.getByText("仅显示一次，请立即复制保存。")).toBeInTheDocument();
+    const oneTimeKey = screen.getByText("仅显示一次，请立即复制保存。").closest(".one-time-key");
     expect(oneTimeKey).not.toBeNull();
     expect(within(oneTimeKey as HTMLElement).getByText(/^sk-/)).toBeInTheDocument();
   });
@@ -131,7 +131,7 @@ describe("API key management page", () => {
     expect(writeText).toHaveBeenCalledWith("sk-45ce0abcdefghijklmnopqrstuvwxyza781");
   });
 
-  it("edits only the API key name", () => {
+  it("edits only the API key name", async () => {
     render(<App />);
 
     openApiKeyPage();
@@ -145,11 +145,11 @@ describe("API key management page", () => {
     fireEvent.change(screen.getByLabelText("API Key 名称"), { target: { value: "Laptop Dev" } });
     fireEvent.click(screen.getByRole("button", { name: "保存名称" }));
 
-    expect(screen.getByText("Laptop Dev")).toBeInTheDocument();
+    expect(await screen.findByText("Laptop Dev")).toBeInTheDocument();
     expect(screen.queryByText("Laptop")).not.toBeInTheDocument();
   });
 
-  it("filters and deletes API keys", () => {
+  it("filters and deletes API keys", async () => {
     render(<App />);
 
     openApiKeyPage();
@@ -163,7 +163,7 @@ describe("API key management page", () => {
     fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "删除 PCHome OpenCode" }));
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
-    expect(screen.getByText("没有匹配的 API Key")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("没有匹配的 API Key")).toBeInTheDocument());
   });
 });
 
@@ -179,7 +179,7 @@ describe("usage quota page", () => {
     expect(screen.getByRole("button", { name: "新增额度" })).toBeInTheDocument();
   });
 
-  it("filters quota members from the global search and increases a member quota", () => {
+  it("filters quota members from the global search and increases a member quota", async () => {
     window.history.pushState({}, "", "/usage");
 
     render(<App />);
@@ -187,11 +187,11 @@ describe("usage quota page", () => {
     fireEvent.change(screen.getByLabelText("搜索 API Key 或团队"), { target: { value: "Ada" } });
 
     expect(screen.getByText("Ada Chen")).toBeInTheDocument();
-    expect(screen.queryByText("林舟")).not.toBeInTheDocument();
+    expect(screen.queryByText("林舒")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "提高 Ada Chen 额度" }));
 
-    expect(screen.getByText("$2,100 / $3,300")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("$2,100 / $3,300")).toBeInTheDocument());
     expect(screen.getByRole("status")).toHaveTextContent("Ada Chen 额度已提升到 $3,300，使用率更新为 64%");
   });
 });

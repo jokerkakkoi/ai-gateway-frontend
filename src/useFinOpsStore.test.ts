@@ -6,13 +6,13 @@ beforeEach(() => {
 });
 
 describe("FinOps Zustand store", () => {
-  it("keeps dashboard controls and quota adjustments in shared state", () => {
+  it("keeps dashboard controls and quota adjustments in shared state", async () => {
     const store = useFinOpsStore.getState();
 
     store.setViewMode("personal");
     store.setPeriod("2026-05");
     store.setSearchQuery("Ada");
-    store.increaseMemberQuota("member-ada");
+    await store.increaseMemberQuota("member-ada");
 
     const updated = useFinOpsStore.getState();
 
@@ -23,12 +23,12 @@ describe("FinOps Zustand store", () => {
     expect(updated.toast).toBe("Ada Chen 额度已提升到 $3,300，使用率更新为 64%");
   });
 
-  it("creates, renames, and deletes managed API keys through store actions", () => {
+  it("creates, renames, and deletes managed API keys through store actions", async () => {
     let store = useFinOpsStore.getState();
 
     store.openCreateKeyDialog();
     store.setKeyName("Notebook Agent");
-    store.submitKeyDialog();
+    await store.submitKeyDialog();
 
     store = useFinOpsStore.getState();
     const created = store.managedKeys[0];
@@ -39,13 +39,13 @@ describe("FinOps Zustand store", () => {
 
     store.openEditKeyDialog(created);
     store.setKeyName("Notebook Worker");
-    store.submitKeyDialog();
+    await useFinOpsStore.getState().submitKeyDialog();
 
     store = useFinOpsStore.getState();
     expect(store.managedKeys[0].name).toBe("Notebook Worker");
 
     store.setDeleteTarget(store.managedKeys[0]);
-    store.deleteKey();
+    await useFinOpsStore.getState().deleteKey();
 
     expect(useFinOpsStore.getState().managedKeys.some((key) => key.name === "Notebook Worker")).toBe(false);
   });
