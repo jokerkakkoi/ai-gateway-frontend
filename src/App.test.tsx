@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 function openApiKeyPage() {
-  fireEvent.click(screen.getByRole("button", { name: "API Key" }));
+  fireEvent.click(screen.getByRole("link", { name: "API Key" }));
 }
 
 const writeText = vi.fn();
 
 beforeEach(() => {
   writeText.mockReset();
+  window.history.pushState({}, "", "/");
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -19,13 +20,60 @@ beforeEach(() => {
 });
 
 describe("API key management page", () => {
+  it("renders sidebar navigation as route links", () => {
+    render(<App />);
+
+    expect(screen.getByRole("link", { name: "API Key" })).toHaveAttribute("href", "/keys");
+  });
+
+  it("opens the API Key page directly from the /keys route", () => {
+    window.history.pushState({}, "", "/keys");
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "API Keys" })).toBeInTheDocument();
+    expect(screen.queryByText("Policy Guard")).not.toBeInTheDocument();
+  });
+
+  it("updates the browser path when navigating between sections", () => {
+    render(<App />);
+
+    openApiKeyPage();
+
+    expect(window.location.pathname).toBe("/keys");
+  });
+
+  it.each([
+    ["/teams", "团队额度"],
+    ["/billing", "账单"],
+    ["/models", "模型价格"],
+    ["/routing", "路由策略"],
+    ["/approvals", "审批"],
+    ["/settings", "设置"]
+  ])("renders the placeholder page for %s", (path, heading) => {
+    window.history.pushState({}, "", path);
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it("redirects unknown routes to the overview page", async () => {
+    window.history.pushState({}, "", "/missing");
+
+    render(<App />);
+
+    expect(await screen.findByText("Policy Guard")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+  });
+
   it("shows a dedicated API Key page when selected from navigation", () => {
     render(<App />);
 
     openApiKeyPage();
 
     expect(screen.getByRole("heading", { name: "API Keys" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "预算燃尽与 Token 趋势" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Policy Guard")).not.toBeInTheDocument();
   });
 
   it("closes the mobile sidebar after selecting the API Key page", () => {

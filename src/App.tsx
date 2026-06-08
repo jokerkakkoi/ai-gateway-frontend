@@ -20,7 +20,7 @@ import {
   Plug,
   Plus,
   RefreshCw,
-  Route,
+  Route as RouteIcon,
   Search,
   Settings,
   ShieldCheck,
@@ -33,6 +33,7 @@ import {
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { BrowserRouter, Navigate, NavLink, useLocation } from "react-router";
 import {
   calculateMonthlySpend,
   createApiKeyRecord,
@@ -113,13 +114,40 @@ const navItems: Array<{ id: Section; label: string; icon: typeof LayoutDashboard
   { id: "keys", label: "API Key", icon: KeyRound },
   { id: "billing", label: "账单", icon: CreditCard },
   { id: "models", label: "模型价格", icon: BarChart3 },
-  { id: "routing", label: "路由策略", icon: Route },
+  { id: "routing", label: "路由策略", icon: RouteIcon },
   { id: "approvals", label: "审批", icon: ShieldCheck },
   { id: "settings", label: "设置", icon: Settings }
 ];
 
 function App() {
-  const [section, setSection] = useState<Section>("overview");
+  return (
+    <BrowserRouter>
+      <FinOpsConsole />
+    </BrowserRouter>
+  );
+}
+
+const sectionPaths: Record<Section, string> = {
+  overview: "/",
+  teams: "/teams",
+  keys: "/keys",
+  billing: "/billing",
+  models: "/models",
+  routing: "/routing",
+  approvals: "/approvals",
+  settings: "/settings"
+};
+
+const pathToSection = Object.fromEntries(Object.entries(sectionPaths).map(([section, path]) => [path, section])) as Partial<Record<string, Section>>;
+
+function sectionFromPath(pathname: string) {
+  const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+  return pathToSection[normalizedPath] ?? null;
+}
+
+function FinOpsConsole() {
+  const location = useLocation();
+  const section = sectionFromPath(location.pathname);
   const [viewMode, setViewMode] = useState<ViewMode>("team");
   const [period, setPeriod] = useState("2026-06");
   const [selectedModel, setSelectedModel] = useState("GPT-4.1");
@@ -148,6 +176,10 @@ function App() {
     return key.name.toLowerCase().includes(query) || key.maskedKey.toLowerCase().includes(query);
   });
 
+  if (!section) {
+    return <Navigate to="/" replace />;
+  }
+
   function toggleRule(ruleName: string) {
     setEnabledRules((previous) => {
       const next = new Set(previous);
@@ -164,11 +196,6 @@ function App() {
 
   function acknowledge(action: string) {
     setToast(action);
-  }
-
-  function selectSection(nextSection: Section) {
-    setSection(nextSection);
-    setSidebarOpen(false);
   }
 
   function openCreateKeyDialog() {
@@ -239,10 +266,17 @@ function App() {
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => selectSection(item.id)} title={item.label}>
+              <NavLink
+                key={item.id}
+                to={sectionPaths[item.id]}
+                end={item.id === "overview"}
+                className={({ isActive }) => (isActive ? "active" : "")}
+                onClick={() => setSidebarOpen(false)}
+                title={item.label}
+              >
                 <Icon size={18} />
                 <span>{item.label}</span>
-              </button>
+              </NavLink>
             );
           })}
         </nav>
