@@ -91,7 +91,7 @@ button {
   gap: 6px;
 }
 
-.nav-list button {
+.nav-list a {
   width: 100%;
   height: 40px;
   border: 0;
@@ -103,15 +103,16 @@ button {
   gap: 10px;
   padding: 0 12px;
   text-align: left;
+  text-decoration: none;
 }
 
-.nav-list button:hover,
-.nav-list button.active {
+.nav-list a:hover,
+.nav-list a.active {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
-.nav-list button.active {
+.nav-list a.active {
   box-shadow: inset 3px 0 0 #d75865;
 }
 
@@ -898,7 +899,7 @@ select,
     display: none;
   }
 
-  .nav-list button {
+  .nav-list a {
     justify-content: center;
     padding: 0;
   }
@@ -939,7 +940,7 @@ select,
     display: block;
   }
 
-  .nav-list button {
+  .nav-list a {
     justify-content: flex-start;
     padding: 0 12px;
   }

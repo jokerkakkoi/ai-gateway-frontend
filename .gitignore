@@ -9,6 +9,8 @@ build/
 # Test and coverage output
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
 
 # Local logs
 logs/
@@ -25,6 +27,14 @@ lerna-debug.log*
 .parcel-cache/
 .eslintcache
 *.tsbuildinfo
+
+# Local workspaces and temporary files
+.worktrees/
+worktrees/
+tmp/
+temp/
+*.tmp
+*.pid
 
 # Environment and secrets
 .env
