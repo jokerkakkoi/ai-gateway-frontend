@@ -34,6 +34,15 @@ export type ApiKeyRisk = {
   reasons: Array<"quota" | "velocity">;
 };
 
+export type ManagedApiKey = {
+  id: string;
+  name: string;
+  secret: string;
+  maskedKey: string;
+  createdAt: string;
+  lastUsedAt: string;
+};
+
 export function estimateTokenCost({
   inputTokens,
   outputTokens,
@@ -93,6 +102,43 @@ export function flagKeyRisks(keys: ApiKeyHealth[]): ApiKeyRisk[] {
 
     return reasons.length > 0 ? [{ name: key.name, reasons }] : [];
   });
+}
+
+export function maskApiKeySecret(secret: string): string {
+  if (secret.length <= 12) {
+    return secret;
+  }
+
+  return `${secret.slice(0, 8)}${"*".repeat(20)}${secret.slice(-4)}`;
+}
+
+export function createApiKeyRecord({
+  id,
+  name,
+  secret,
+  createdAt,
+  lastUsedAt = "从未使用"
+}: {
+  id: string;
+  name: string;
+  secret: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}): ManagedApiKey {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    throw new Error("API key name is required");
+  }
+
+  return {
+    id,
+    name: trimmedName,
+    secret,
+    maskedKey: maskApiKeySecret(secret),
+    createdAt,
+    lastUsedAt
+  };
 }
 
 export function formatCurrency(value: number, maximumFractionDigits = 0): string {

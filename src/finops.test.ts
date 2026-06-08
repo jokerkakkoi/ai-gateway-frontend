@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  createApiKeyRecord,
   calculateMonthlySpend,
   estimateTokenCost,
   flagKeyRisks,
+  maskApiKeySecret,
   projectBudgetBurn
 } from "./finops";
 
@@ -58,5 +60,38 @@ describe("AI gateway FinOps calculations", () => {
       { name: "prod-agent", reasons: ["quota"] },
       { name: "batch-sum", reasons: ["velocity"] }
     ]);
+  });
+
+  it("masks API key secrets while preserving recognizable prefix and suffix", () => {
+    expect(maskApiKeySecret("sk-45ce0abcdefghijklmnopqrstuvwxyza781")).toBe("sk-45ce0********************a781");
+  });
+
+  it("creates API key records from a name and generated secret", () => {
+    const record = createApiKeyRecord({
+      name: "  Laptop OpenCode  ",
+      secret: "sk-11b97abcdefghijklmnop9008",
+      createdAt: "2026-06-08",
+      id: "key-1"
+    });
+
+    expect(record).toEqual({
+      id: "key-1",
+      name: "Laptop OpenCode",
+      secret: "sk-11b97abcdefghijklmnop9008",
+      maskedKey: "sk-11b97********************9008",
+      createdAt: "2026-06-08",
+      lastUsedAt: "从未使用"
+    });
+  });
+
+  it("rejects empty API key names", () => {
+    expect(() =>
+      createApiKeyRecord({
+        name: "   ",
+        secret: "sk-11b97abcdefghijklmnop9008",
+        createdAt: "2026-06-08",
+        id: "key-1"
+      })
+    ).toThrow("API key name is required");
   });
 });

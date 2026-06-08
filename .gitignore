@@ -3,13 +3,46 @@ node_modules/
 
 # Build output
 dist/
+dist-ssr/
+build/
 
-# Local logs and caches
+# Test and coverage output
+coverage/
+.nyc_output/
+
+# Local logs
+logs/
 *.log
-*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Caches and generated metadata
 .vite/
+.cache/
+.parcel-cache/
+.eslintcache
+*.tsbuildinfo
 
 # Environment and secrets
 .env
 .env.*
+*.local
 !.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor and IDE files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

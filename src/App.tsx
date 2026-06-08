@@ -16,7 +16,9 @@ import {
   LockKeyhole,
   MoreHorizontal,
   Pause,
+  Pencil,
   Plug,
+  Plus,
   RefreshCw,
   Route,
   Search,
@@ -24,6 +26,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   UserRoundCog,
   UsersRound,
   WalletCards,
@@ -32,17 +35,18 @@ import {
 import { useMemo, useState } from "react";
 import {
   calculateMonthlySpend,
+  createApiKeyRecord,
   estimateTokenCost,
-  flagKeyRisks,
   formatCompactNumber,
   formatCurrency,
   projectBudgetBurn,
+  type ManagedApiKey,
   type Price
 } from "./finops";
 
 type Section = "overview" | "teams" | "keys" | "billing" | "models" | "routing" | "approvals" | "settings";
 type ViewMode = "team" | "personal";
-type RiskFilter = "all" | "risk" | "healthy";
+type KeyDialog = { mode: "create" } | { mode: "edit"; keyId: string };
 
 const modelPrices: Record<string, Price> = {
   "GPT-4.1": { inputPricePerMTok: 5, outputPricePerMTok: 15 },
@@ -58,51 +62,28 @@ const usageRows = [
   { model: "DeepSeek R1", inputTokens: 790_000_000, outputTokens: 168_000_000 }
 ];
 
-const apiKeys = [
-  {
-    name: "prod-agent-core",
-    owner: "研发平台组",
-    scope: "生产",
-    provider: "OpenAI / Claude",
-    quotaUsedRatio: 0.86,
-    dailySpendDeltaRatio: 0.18,
-    spend: 3220,
-    tokens: 162_000_000,
-    lastUsed: "2 分钟前"
-  },
-  {
-    name: "batch-summary",
-    owner: "数据应用组",
-    scope: "批处理",
-    provider: "Gemini / DeepSeek",
-    quotaUsedRatio: 0.48,
-    dailySpendDeltaRatio: 0.44,
-    spend: 940,
-    tokens: 288_000_000,
-    lastUsed: "18 分钟前"
-  },
-  {
-    name: "sales-copilot",
-    owner: "增长团队",
-    scope: "内部工具",
-    provider: "OpenAI",
-    quotaUsedRatio: 0.74,
-    dailySpendDeltaRatio: 0.12,
-    spend: 1410,
-    tokens: 72_000_000,
-    lastUsed: "9 分钟前"
-  },
-  {
-    name: "sandbox-lab",
-    owner: "个人池",
-    scope: "沙箱",
-    provider: "DeepSeek",
-    quotaUsedRatio: 0.36,
-    dailySpendDeltaRatio: 0.08,
-    spend: 186,
-    tokens: 41_000_000,
-    lastUsed: "1 小时前"
-  }
+const initialApiKeys: ManagedApiKey[] = [
+  createApiKeyRecord({
+    id: "key-laptop",
+    name: "Laptop",
+    secret: "sk-45ce0abcdefghijklmnopqrstuvwxyza781",
+    createdAt: "2026-04-29",
+    lastUsedAt: "2026-05-11"
+  }),
+  createApiKeyRecord({
+    id: "key-laptop-opencode",
+    name: "Laptop OpenCode",
+    secret: "sk-11b97abcdefghijklmnop9008",
+    createdAt: "2026-05-27",
+    lastUsedAt: "2026-06-04"
+  }),
+  createApiKeyRecord({
+    id: "key-pchome-opencode",
+    name: "PCHome OpenCode",
+    secret: "sk-831b7abcdefghijklmnopqrst8ff8",
+    createdAt: "2026-05-27",
+    lastUsedAt: "2026-05-27"
+  })
 ];
 
 const rules = [
@@ -141,26 +122,30 @@ function App() {
   const [section, setSection] = useState<Section>("overview");
   const [viewMode, setViewMode] = useState<ViewMode>("team");
   const [period, setPeriod] = useState("2026-06");
-  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [selectedModel, setSelectedModel] = useState("GPT-4.1");
   const [inputTokens, setInputTokens] = useState(40_000);
   const [outputTokens, setOutputTokens] = useState(8_000);
   const [requests, setRequests] = useState(120);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [managedKeys, setManagedKeys] = useState<ManagedApiKey[]>(initialApiKeys);
+  const [keyDialog, setKeyDialog] = useState<KeyDialog | null>(null);
+  const [keyName, setKeyName] = useState("");
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedApiKey | null>(null);
   const [enabledRules, setEnabledRules] = useState(() => new Set(["生产 Key 达到 80% 额度自动预警", "个人免费池每月 30 美元", "异常日增幅超过 35% 自动冻结"]));
   const [drawer, setDrawer] = useState<string | null>(null);
   const [toast, setToast] = useState("团队治理台已加载");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const riskNames = useMemo(() => new Set(flagKeyRisks(apiKeys).map((risk) => risk.name)), []);
   const monthlySpend = useMemo(() => calculateMonthlySpend(usageRows, modelPrices), []);
   const budget = projectBudgetBurn({ spendToDate: 8421, monthlyBudget: viewMode === "team" ? 12000 : 900, elapsedDays: 18, daysInMonth: 30 });
   const tokenCost = estimateTokenCost({ ...modelPrices[selectedModel], inputTokens, outputTokens });
   const batchCost = tokenCost * requests;
 
-  const filteredKeys = apiKeys.filter((key) => {
-    if (riskFilter === "risk") return riskNames.has(key.name);
-    if (riskFilter === "healthy") return !riskNames.has(key.name);
-    return true;
+  const filteredKeys = managedKeys.filter((key) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return key.name.toLowerCase().includes(query) || key.maskedKey.toLowerCase().includes(query);
   });
 
   function toggleRule(ruleName: string) {
@@ -181,6 +166,65 @@ function App() {
     setToast(action);
   }
 
+  function selectSection(nextSection: Section) {
+    setSection(nextSection);
+    setSidebarOpen(false);
+  }
+
+  function openCreateKeyDialog() {
+    setKeyName("");
+    setCreatedSecret(null);
+    setKeyDialog({ mode: "create" });
+  }
+
+  function openEditKeyDialog(key: ManagedApiKey) {
+    setKeyName(key.name);
+    setCreatedSecret(null);
+    setKeyDialog({ mode: "edit", keyId: key.id });
+  }
+
+  function submitKeyDialog() {
+    const trimmedName = keyName.trim();
+
+    if (!trimmedName) {
+      acknowledge("请输入 API Key 名称");
+      return;
+    }
+
+    if (keyDialog?.mode === "edit") {
+      setManagedKeys((keys) => keys.map((key) => (key.id === keyDialog.keyId ? { ...key, name: trimmedName } : key)));
+      acknowledge("API Key 名称已更新");
+      setKeyDialog(null);
+      return;
+    }
+
+    const secret = generateApiKeySecret();
+    const record = createApiKeyRecord({
+      id: `key-${Date.now()}`,
+      name: trimmedName,
+      secret,
+      createdAt: new Date().toISOString().slice(0, 10)
+    });
+
+    setManagedKeys((keys) => [record, ...keys]);
+    setCreatedSecret(secret);
+    setKeyName(record.name);
+    acknowledge("API Key 已创建，请立即复制保存");
+  }
+
+  function deleteKey() {
+    if (!deleteTarget) return;
+
+    setManagedKeys((keys) => keys.filter((key) => key.id !== deleteTarget.id));
+    acknowledge(`${deleteTarget.name} 已删除`);
+    setDeleteTarget(null);
+  }
+
+  function copyValue(value: string, message: string) {
+    void navigator.clipboard?.writeText(value);
+    acknowledge(message);
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
@@ -195,7 +239,7 @@ function App() {
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)} title={item.label}>
+              <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => selectSection(item.id)} title={item.label}>
                 <Icon size={18} />
                 <span>{item.label}</span>
               </button>
@@ -223,7 +267,12 @@ function App() {
           <div className="top-actions">
             <label className="search-box">
               <Search size={16} />
-              <input aria-label="搜索 API Key 或团队" placeholder="搜索 Key、团队、模型" />
+              <input
+                aria-label="搜索 API Key 或团队"
+                placeholder="搜索 Key、团队、模型"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
             </label>
             <select value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="计费周期">
               <option value="2026-06">2026 年 6 月</option>
@@ -244,37 +293,61 @@ function App() {
           </div>
         </header>
 
-        <section className="summary-grid">
-          <MetricCard icon={WalletCards} label="本月成本" value={formatCurrency(8421)} detail={`模型计费 ${formatCurrency(monthlySpend, 1)}`} tone="rose" />
-          <MetricCard icon={Gauge} label="预算投影" value={`${Math.round(budget.projectedRatio * 100)}%`} detail={budget.status === "overrun" ? "预计超预算" : "预算健康"} tone="green" />
-          <MetricCard icon={Sparkles} label="Token 总量" value={formatCompactNumber(2_034_000_000)} detail="输入 78% / 输出 22%" tone="teal" />
-          <MetricCard icon={AlertTriangle} label="Key 风险" value={`${riskNames.size}`} detail="额度或日增幅异常" tone="amber" />
-        </section>
+        {section === "overview" && (
+          <>
+            <section className="summary-grid">
+              <MetricCard icon={WalletCards} label="本月成本" value={formatCurrency(8421)} detail={`模型计费 ${formatCurrency(monthlySpend, 1)}`} tone="rose" />
+              <MetricCard icon={Gauge} label="预算投影" value={`${Math.round(budget.projectedRatio * 100)}%`} detail={budget.status === "overrun" ? "预计超预算" : "预算健康"} tone="green" />
+              <MetricCard icon={Sparkles} label="Token 总量" value={formatCompactNumber(2_034_000_000)} detail="输入 78% / 输出 22%" tone="teal" />
+              <MetricCard icon={KeyRound} label="API Keys" value={`${managedKeys.length}`} detail={`${filteredKeys.length} 条匹配当前搜索`} tone="amber" />
+            </section>
 
-        <section className="content-layout">
-          <div className="primary-stack">
-            <BudgetPanel projection={budget} viewMode={viewMode} />
-            <GovernanceRules enabledRules={enabledRules} onToggle={toggleRule} onEdit={setDrawer} />
-            <ApiKeyTable filteredKeys={filteredKeys} riskNames={riskNames} riskFilter={riskFilter} setRiskFilter={setRiskFilter} acknowledge={acknowledge} />
-          </div>
+            <section className="content-layout">
+              <div className="primary-stack">
+                <BudgetPanel projection={budget} viewMode={viewMode} />
+                <GovernanceRules enabledRules={enabledRules} onToggle={toggleRule} onEdit={setDrawer} />
+                <ApiKeyTable
+                  filteredKeys={filteredKeys}
+                  onCreate={openCreateKeyDialog}
+                  onCopy={(key) => copyValue(key.secret, `已复制 ${key.name} 的完整 Key`)}
+                  onEdit={openEditKeyDialog}
+                  onDelete={setDeleteTarget}
+                />
+              </div>
 
-          <aside className="right-rail">
-            <TokenCalculator
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              inputTokens={inputTokens}
-              setInputTokens={setInputTokens}
-              outputTokens={outputTokens}
-              setOutputTokens={setOutputTokens}
-              requests={requests}
-              setRequests={setRequests}
-              tokenCost={tokenCost}
-              batchCost={batchCost}
+              <aside className="right-rail">
+                <TokenCalculator
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  inputTokens={inputTokens}
+                  setInputTokens={setInputTokens}
+                  outputTokens={outputTokens}
+                  setOutputTokens={setOutputTokens}
+                  requests={requests}
+                  setRequests={setRequests}
+                  tokenCost={tokenCost}
+                  batchCost={batchCost}
+                />
+                <BillingQueue acknowledge={acknowledge} />
+                <MembersPanel />
+              </aside>
+            </section>
+          </>
+        )}
+
+        {section === "keys" && (
+          <section className="single-page-layout">
+            <ApiKeyTable
+              filteredKeys={filteredKeys}
+              onCreate={openCreateKeyDialog}
+              onCopy={(key) => copyValue(key.secret, `已复制 ${key.name} 的完整 Key`)}
+              onEdit={openEditKeyDialog}
+              onDelete={setDeleteTarget}
             />
-            <BillingQueue acknowledge={acknowledge} />
-            <MembersPanel />
-          </aside>
-        </section>
+          </section>
+        )}
+
+        {section !== "overview" && section !== "keys" && <SectionPlaceholder section={section} />}
       </main>
 
       {drawer && (
@@ -317,6 +390,64 @@ function App() {
         </div>
       )}
 
+      {keyDialog && (
+        <div className="drawer-backdrop" role="presentation" onClick={() => setKeyDialog(null)}>
+          <aside className="drawer" role="dialog" aria-modal="true" aria-label={keyDialog.mode === "create" ? "创建 API Key" : "编辑 API Key"} onClick={(event) => event.stopPropagation()}>
+            <div className="drawer-head">
+              <div>
+                <p className="eyebrow">API Key</p>
+                <h2>{keyDialog.mode === "create" ? "创建 API Key" : "编辑 API Key"}</h2>
+              </div>
+              <button className="icon-button" onClick={() => setKeyDialog(null)} title="关闭" aria-label="关闭">
+                <X size={18} />
+              </button>
+            </div>
+            <label>
+              API Key 名称
+              <input value={keyName} onChange={(event) => setKeyName(event.target.value)} autoFocus />
+            </label>
+            {createdSecret && (
+              <div className="one-time-key" role="status">
+                <span>只显示一次，请立即复制保存。</span>
+                <code>{createdSecret}</code>
+                <button className="ghost-button" onClick={() => copyValue(createdSecret, "完整 API Key 已复制")}>
+                  <Copy size={16} />
+                  复制完整 Key
+                </button>
+              </div>
+            )}
+            <button className="primary-button" onClick={submitKeyDialog}>
+              {keyDialog.mode === "create" ? <Plus size={16} /> : <Check size={16} />}
+              {keyDialog.mode === "create" ? "创建并显示 Key" : "保存名称"}
+            </button>
+          </aside>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="drawer-backdrop" role="presentation" onClick={() => setDeleteTarget(null)}>
+          <aside className="drawer confirm-drawer" role="dialog" aria-modal="true" aria-label="删除 API Key" onClick={(event) => event.stopPropagation()}>
+            <div className="drawer-head">
+              <div>
+                <p className="eyebrow">危险操作</p>
+                <h2>删除 {deleteTarget.name}</h2>
+              </div>
+              <button className="icon-button" onClick={() => setDeleteTarget(null)} title="关闭" aria-label="关闭">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirm-copy">删除后调用方将不能继续使用这个 API Key。这个操作不会影响其他 Key。</p>
+            <div className="confirm-actions">
+              <button className="ghost-button" onClick={() => setDeleteTarget(null)}>取消</button>
+              <button className="primary-button danger-button" onClick={deleteKey}>
+                <Trash2 size={16} />
+                确认删除
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <div className="toast" role="status">{toast}</div>
     </div>
   );
@@ -325,6 +456,22 @@ function App() {
 function sectionLabel(section: Section) {
   const found = navItems.find((item) => item.id === section);
   return found?.label ?? "总览";
+}
+
+function generateApiKeySecret() {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(28);
+
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  const body = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+  return `sk-${body}`;
 }
 
 function MetricCard({ icon: Icon, label, value, detail, tone }: { icon: typeof WalletCards; label: string; value: string; detail: string; tone: string }) {
@@ -422,71 +569,88 @@ function GovernanceRules({ enabledRules, onToggle, onEdit }: { enabledRules: Set
 
 function ApiKeyTable({
   filteredKeys,
-  riskNames,
-  riskFilter,
-  setRiskFilter,
-  acknowledge
+  onCreate,
+  onCopy,
+  onEdit,
+  onDelete
 }: {
-  filteredKeys: typeof apiKeys;
-  riskNames: Set<string>;
-  riskFilter: RiskFilter;
-  setRiskFilter: (filter: RiskFilter) => void;
-  acknowledge: (message: string) => void;
+  filteredKeys: ManagedApiKey[];
+  onCreate: () => void;
+  onCopy: (key: ManagedApiKey) => void;
+  onEdit: (key: ManagedApiKey) => void;
+  onDelete: (key: ManagedApiKey) => void;
 }) {
   return (
-    <section className="panel">
+    <section className="panel api-key-panel">
       <div className="panel-head">
         <div>
-          <p className="eyebrow">Key Health</p>
-          <h2>API Key 风险队列</h2>
+          <p className="eyebrow">Key Management</p>
+          <h2>API Keys</h2>
         </div>
-        <div className="segmented">
-          <button className={riskFilter === "all" ? "selected" : ""} onClick={() => setRiskFilter("all")}>全部</button>
-          <button className={riskFilter === "risk" ? "selected" : ""} onClick={() => setRiskFilter("risk")}>风险</button>
-          <button className={riskFilter === "healthy" ? "selected" : ""} onClick={() => setRiskFilter("healthy")}>健康</button>
-        </div>
+        <button className="primary-button" onClick={onCreate}>
+          <Plus size={16} />
+          创建 API Key
+        </button>
       </div>
-      <div className="data-table">
+      <p className="api-key-note">
+        列表内是你的全部 API Key。API Key 仅在创建时可见，请妥善保存，不要与他人共享或暴露在浏览器、客户端代码中。为保护账户安全，疑似公开泄露的 API Key 可能会被自动禁用。
+      </p>
+      <div className="data-table api-key-table">
         <div className="table-head">
-          <span>Key / Owner</span>
-          <span>额度</span>
-          <span>成本</span>
-          <span>Token</span>
+          <span>名称</span>
+          <span>Key</span>
+          <span>创建日期</span>
+          <span>最新使用日期</span>
           <span>操作</span>
         </div>
-        {filteredKeys.map((key) => {
-          const risky = riskNames.has(key.name);
-          return (
-            <div className="table-row" key={key.name}>
-              <div className="key-cell">
-                <div className={`key-icon ${risky ? "risk" : ""}`}>
-                  {risky ? <AlertTriangle size={16} /> : <KeyRound size={16} />}
-                </div>
-                <div>
-                  <strong>{key.name}</strong>
-                  <span>{key.owner} / {key.scope} / {key.lastUsed}</span>
-                </div>
+        {filteredKeys.map((key) => (
+          <div className="table-row api-key-row" key={key.id}>
+            <div className="key-cell">
+              <div className="key-icon">
+                <KeyRound size={16} />
               </div>
               <div>
-                <div className="progress"><span style={{ width: `${key.quotaUsedRatio * 100}%` }} /></div>
-                <small>{Math.round(key.quotaUsedRatio * 100)}%</small>
-              </div>
-              <strong>{formatCurrency(key.spend)}</strong>
-              <span>{formatCompactNumber(key.tokens)}</span>
-              <div className="row-actions">
-                <button className="icon-button" title="复制 Key" aria-label="复制 Key" onClick={() => acknowledge(`已复制 ${key.name} 的掩码 Key`)}>
-                  <Copy size={16} />
-                </button>
-                <button className="icon-button" title="轮换 Key" aria-label="轮换 Key" onClick={() => acknowledge(`${key.name} 已加入轮换任务`)}>
-                  <RefreshCw size={16} />
-                </button>
-                <button className="icon-button danger" title="暂停 Key" aria-label="暂停 Key" onClick={() => acknowledge(`${key.name} 已暂停并通知 Owner`)}>
-                  <Pause size={16} />
-                </button>
+                <strong>{key.name}</strong>
+                <span>本地管理 Key</span>
               </div>
             </div>
-          );
-        })}
+            <div className="key-value">
+              <code className="masked-key">{key.maskedKey}</code>
+              <button className="icon-button" title="复制完整 Key" aria-label={`复制 ${key.name} 完整 Key`} onClick={() => onCopy(key)}>
+                <Copy size={16} />
+              </button>
+            </div>
+            <span>{key.createdAt}</span>
+            <span>{key.lastUsedAt}</span>
+            <div className="row-actions">
+              <button className="icon-button" title="编辑名称" aria-label={`编辑 ${key.name}`} onClick={() => onEdit(key)}>
+                <Pencil size={16} />
+              </button>
+              <button className="icon-button danger" title="删除 Key" aria-label={`删除 ${key.name}`} onClick={() => onDelete(key)}>
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {filteredKeys.length === 0 && (
+          <div className="empty-state">
+            <KeyRound size={18} />
+            <strong>没有匹配的 API Key</strong>
+            <span>调整搜索词，或创建新的 API Key。</span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SectionPlaceholder({ section }: { section: Section }) {
+  return (
+    <section className="single-page-layout">
+      <div className="panel placeholder-panel">
+        <p className="eyebrow">Workspace</p>
+        <h2>{sectionLabel(section)}</h2>
+        <p>该页面的数据视图待接入。</p>
       </div>
     </section>
   );
