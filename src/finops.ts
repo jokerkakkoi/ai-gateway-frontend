@@ -43,6 +43,14 @@ export type ManagedApiKey = {
   lastUsedAt: string;
 };
 
+export function calculateQuotaUsagePercent({ spend, quotaUsd }: { spend: number; quotaUsd: number }): number {
+  if (quotaUsd <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round((spend / quotaUsd) * 100));
+}
+
 export function estimateTokenCost({
   inputTokens,
   outputTokens,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createApiKeyRecord,
   calculateMonthlySpend,
+  calculateQuotaUsagePercent,
   estimateTokenCost,
   flagKeyRisks,
   maskApiKeySecret,
@@ -47,6 +48,12 @@ describe("AI gateway FinOps calculations", () => {
     expect(burn.projectedSpend).toBeCloseTo(14035, 5);
     expect(burn.projectedRatio).toBeCloseTo(1.16958, 5);
     expect(burn.status).toBe("overrun");
+  });
+
+  it("calculates quota usage percent from spend and quota limit", () => {
+    expect(calculateQuotaUsagePercent({ spend: 2100, quotaUsd: 3300 })).toBe(64);
+    expect(calculateQuotaUsagePercent({ spend: 120, quotaUsd: 0 })).toBe(0);
+    expect(calculateQuotaUsagePercent({ spend: 1400, quotaUsd: 1000 })).toBe(100);
   });
 
   it("flags risky API keys by quota usage and unusual spend velocity", () => {
