@@ -606,6 +606,138 @@ select,
   grid-template-columns: minmax(170px, 1fr) minmax(230px, 1.3fr) minmax(100px, 0.6fr) minmax(110px, 0.7fr) 126px;
 }
 
+.usage-page {
+  align-content: start;
+}
+
+.usage-summary-grid {
+  margin-bottom: 0;
+}
+
+.usage-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 12px;
+}
+
+.quota-overview-card,
+.quota-policy-list {
+  border-radius: 8px;
+  background: #fbfafc;
+  padding: 14px;
+}
+
+.quota-overview-card {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.quota-overview-card p {
+  margin-bottom: 0;
+  color: #5f5368;
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.compact-ring {
+  width: 104px;
+  height: 104px;
+}
+
+.compact-ring span {
+  width: 74px;
+  height: 74px;
+  font-size: 20px;
+}
+
+.quota-policy-list {
+  display: grid;
+}
+
+.quota-policy-list div {
+  padding: 10px 0;
+  border-top: 1px solid #eee9f1;
+}
+
+.quota-policy-list div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.quota-policy-list div:last-child {
+  padding-bottom: 0;
+}
+
+.quota-policy-list strong,
+.quota-policy-list span {
+  display: block;
+}
+
+.quota-policy-list span {
+  margin-top: 4px;
+  color: #6f6577;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.table-count {
+  border-radius: 999px;
+  border: 1px solid #e1dae6;
+  padding: 6px 10px;
+  color: #5f5368;
+  font-size: 12px;
+}
+
+.quota-table .table-head,
+.quota-table .table-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.7fr) minmax(220px, 1.2fr) minmax(120px, 0.7fr) minmax(96px, 0.5fr);
+}
+
+.quota-row {
+  min-height: 76px;
+}
+
+.quota-usage {
+  display: grid;
+  gap: 8px;
+}
+
+.quota-usage small,
+.quota-share span {
+  color: #716678;
+  font-size: 12px;
+}
+
+.quota-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-weight: 700;
+}
+
+.status-pill.healthy {
+  color: #557f3e;
+  background: #e4f0dc;
+}
+
+.status-pill.watch {
+  color: #9f6a16;
+  background: #fae9cd;
+}
+
+.status-pill.danger {
+  color: #b84653;
+  background: #f7dce0;
+}
+
 .api-key-row span {
   color: #716678;
   font-size: 13px;
@@ -915,6 +1047,10 @@ select,
   .budget-grid {
     grid-template-columns: 1fr;
   }
+
+  .usage-control-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -985,6 +1121,10 @@ select,
     grid-template-columns: 1fr;
   }
 
+  .quota-table .table-row {
+    grid-template-columns: 1fr;
+  }
+
   .rule-row {
     grid-template-columns: 36px minmax(0, 1fr) 52px 38px;
   }
@@ -1019,5 +1159,9 @@ select,
   .member-row {
     grid-template-columns: 1fr;
     padding: 10px 0;
+  }
+
+  .quota-overview-card {
+    grid-template-columns: 1fr;
   }
 }

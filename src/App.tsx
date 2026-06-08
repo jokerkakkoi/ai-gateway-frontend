@@ -32,85 +32,31 @@ import {
   WalletCards,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BrowserRouter, Navigate, NavLink, useLocation } from "react-router";
+import { useShallow } from "zustand/react/shallow";
 import {
   calculateMonthlySpend,
-  createApiKeyRecord,
   estimateTokenCost,
   formatCompactNumber,
   formatCurrency,
   projectBudgetBurn,
-  type ManagedApiKey,
-  type Price
+  type ManagedApiKey
 } from "./finops";
-
-type Section = "overview" | "teams" | "keys" | "billing" | "models" | "routing" | "approvals" | "settings";
-type ViewMode = "team" | "personal";
-type KeyDialog = { mode: "create" } | { mode: "edit"; keyId: string };
-
-const modelPrices: Record<string, Price> = {
-  "GPT-4.1": { inputPricePerMTok: 5, outputPricePerMTok: 15 },
-  "Claude 3.7": { inputPricePerMTok: 3, outputPricePerMTok: 15 },
-  "Gemini 2.5": { inputPricePerMTok: 1.25, outputPricePerMTok: 10 },
-  "DeepSeek R1": { inputPricePerMTok: 0.55, outputPricePerMTok: 2.19 }
-};
-
-const usageRows = [
-  { model: "GPT-4.1", inputTokens: 514_000_000, outputTokens: 143_000_000 },
-  { model: "Claude 3.7", inputTokens: 304_000_000, outputTokens: 91_000_000 },
-  { model: "Gemini 2.5", inputTokens: 426_000_000, outputTokens: 62_000_000 },
-  { model: "DeepSeek R1", inputTokens: 790_000_000, outputTokens: 168_000_000 }
-];
-
-const initialApiKeys: ManagedApiKey[] = [
-  createApiKeyRecord({
-    id: "key-laptop",
-    name: "Laptop",
-    secret: "sk-45ce0abcdefghijklmnopqrstuvwxyza781",
-    createdAt: "2026-04-29",
-    lastUsedAt: "2026-05-11"
-  }),
-  createApiKeyRecord({
-    id: "key-laptop-opencode",
-    name: "Laptop OpenCode",
-    secret: "sk-11b97abcdefghijklmnop9008",
-    createdAt: "2026-05-27",
-    lastUsedAt: "2026-06-04"
-  }),
-  createApiKeyRecord({
-    id: "key-pchome-opencode",
-    name: "PCHome OpenCode",
-    secret: "sk-831b7abcdefghijklmnopqrst8ff8",
-    createdAt: "2026-05-27",
-    lastUsedAt: "2026-05-27"
-  })
-];
-
-const rules = [
-  { name: "生产 Key 达到 80% 额度自动预警", target: "prod-*", status: "enabled", budget: "$8,000", owner: "平台组" },
-  { name: "高价模型调用需要审批", target: "GPT-4.1 / Claude", status: "draft", budget: "$1,200", owner: "财务运营" },
-  { name: "个人免费池每月 30 美元", target: "个人模式", status: "enabled", budget: "$30 / 人", owner: "所有团队" },
-  { name: "异常日增幅超过 35% 自动冻结", target: "全部 Key", status: "enabled", budget: "动态", owner: "安全组" }
-];
-
-const members = [
-  { name: "林舟", role: "Owner", team: "研发平台", quota: 92, spend: 2480 },
-  { name: "Ada Chen", role: "Admin", team: "数据应用", quota: 63, spend: 1730 },
-  { name: "周遥", role: "Member", team: "增长", quota: 44, spend: 820 },
-  { name: "Mika", role: "Member", team: "个人池", quota: 18, spend: 112 }
-];
-
-const billingQueue = [
-  { id: "INV-0620", team: "研发平台", amount: 3270, status: "待归因", cycle: "2026-06" },
-  { id: "INV-0618", team: "数据应用", amount: 1190, status: "待审批", cycle: "2026-06" },
-  { id: "CR-042", team: "增长团队", amount: -284, status: "节省入账", cycle: "2026-06" }
-];
-
-const trend = [42, 58, 49, 71, 64, 83, 76, 91, 88, 69, 97, 82, 74, 93];
+import {
+  billingQueue,
+  governanceRules,
+  modelPrices,
+  trend,
+  usageRows,
+  useFinOpsStore,
+  type QuotaMember,
+  type Section,
+  type ViewMode
+} from "./useFinOpsStore";
 const navItems: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "总览", icon: LayoutDashboard },
-  { id: "teams", label: "团队额度", icon: UsersRound },
+  { id: "usage", label: "额度", icon: UsersRound },
   { id: "keys", label: "API Key", icon: KeyRound },
   { id: "billing", label: "账单", icon: CreditCard },
   { id: "models", label: "模型价格", icon: BarChart3 },
@@ -129,7 +75,7 @@ function App() {
 
 const sectionPaths: Record<Section, string> = {
   overview: "/",
-  teams: "/teams",
+  usage: "/usage",
   keys: "/keys",
   billing: "/billing",
   models: "/models",
@@ -148,103 +94,112 @@ function sectionFromPath(pathname: string) {
 function FinOpsConsole() {
   const location = useLocation();
   const section = sectionFromPath(location.pathname);
-  const [viewMode, setViewMode] = useState<ViewMode>("team");
-  const [period, setPeriod] = useState("2026-06");
-  const [selectedModel, setSelectedModel] = useState("GPT-4.1");
-  const [inputTokens, setInputTokens] = useState(40_000);
-  const [outputTokens, setOutputTokens] = useState(8_000);
-  const [requests, setRequests] = useState(120);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [managedKeys, setManagedKeys] = useState<ManagedApiKey[]>(initialApiKeys);
-  const [keyDialog, setKeyDialog] = useState<KeyDialog | null>(null);
-  const [keyName, setKeyName] = useState("");
-  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ManagedApiKey | null>(null);
-  const [enabledRules, setEnabledRules] = useState(() => new Set(["生产 Key 达到 80% 额度自动预警", "个人免费池每月 30 美元", "异常日增幅超过 35% 自动冻结"]));
-  const [drawer, setDrawer] = useState<string | null>(null);
-  const [toast, setToast] = useState("团队治理台已加载");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const legacyTeamsPath = location.pathname.replace(/\/+$/, "") === "/teams";
+  const {
+    viewMode,
+    period,
+    selectedModel,
+    inputTokens,
+    outputTokens,
+    requests,
+    searchQuery,
+    managedKeys,
+    keyDialog,
+    keyName,
+    createdSecret,
+    deleteTarget,
+    enabledRules,
+    drawer,
+    toast,
+    sidebarOpen,
+    members,
+    setViewMode,
+    setPeriod,
+    setSelectedModel,
+    setInputTokens,
+    setOutputTokens,
+    setRequests,
+    setSearchQuery,
+    setDrawer,
+    setToast,
+    setSidebarOpen,
+    toggleRule,
+    openCreateKeyDialog,
+    openEditKeyDialog,
+    setKeyDialog,
+    setKeyName,
+    submitKeyDialog,
+    setDeleteTarget,
+    deleteKey,
+    increaseMemberQuota
+  } = useFinOpsStore(
+    useShallow((state) => ({
+      viewMode: state.viewMode,
+      period: state.period,
+      selectedModel: state.selectedModel,
+      inputTokens: state.inputTokens,
+      outputTokens: state.outputTokens,
+      requests: state.requests,
+      searchQuery: state.searchQuery,
+      managedKeys: state.managedKeys,
+      keyDialog: state.keyDialog,
+      keyName: state.keyName,
+      createdSecret: state.createdSecret,
+      deleteTarget: state.deleteTarget,
+      enabledRules: state.enabledRules,
+      drawer: state.drawer,
+      toast: state.toast,
+      sidebarOpen: state.sidebarOpen,
+      members: state.members,
+      setViewMode: state.setViewMode,
+      setPeriod: state.setPeriod,
+      setSelectedModel: state.setSelectedModel,
+      setInputTokens: state.setInputTokens,
+      setOutputTokens: state.setOutputTokens,
+      setRequests: state.setRequests,
+      setSearchQuery: state.setSearchQuery,
+      setDrawer: state.setDrawer,
+      setToast: state.setToast,
+      setSidebarOpen: state.setSidebarOpen,
+      toggleRule: state.toggleRule,
+      openCreateKeyDialog: state.openCreateKeyDialog,
+      openEditKeyDialog: state.openEditKeyDialog,
+      setKeyDialog: state.setKeyDialog,
+      setKeyName: state.setKeyName,
+      submitKeyDialog: state.submitKeyDialog,
+      setDeleteTarget: state.setDeleteTarget,
+      deleteKey: state.deleteKey,
+      increaseMemberQuota: state.increaseMemberQuota
+    }))
+  );
 
   const monthlySpend = useMemo(() => calculateMonthlySpend(usageRows, modelPrices), []);
   const budget = projectBudgetBurn({ spendToDate: 8421, monthlyBudget: viewMode === "team" ? 12000 : 900, elapsedDays: 18, daysInMonth: 30 });
   const tokenCost = estimateTokenCost({ ...modelPrices[selectedModel], inputTokens, outputTokens });
   const batchCost = tokenCost * requests;
 
-  const filteredKeys = managedKeys.filter((key) => {
+  const filteredKeys = useMemo(() => managedKeys.filter((key) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
     return key.name.toLowerCase().includes(query) || key.maskedKey.toLowerCase().includes(query);
-  });
+  }), [managedKeys, searchQuery]);
+
+  const filteredMembers = useMemo(() => members.filter((member) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return member.name.toLowerCase().includes(query) || member.team.toLowerCase().includes(query) || member.role.toLowerCase().includes(query);
+  }), [members, searchQuery]);
+
+  if (legacyTeamsPath) {
+    return <Navigate to="/usage" replace />;
+  }
 
   if (!section) {
     return <Navigate to="/" replace />;
   }
 
-  function toggleRule(ruleName: string) {
-    setEnabledRules((previous) => {
-      const next = new Set(previous);
-      if (next.has(ruleName)) {
-        next.delete(ruleName);
-        setToast(`已暂停规则：${ruleName}`);
-      } else {
-        next.add(ruleName);
-        setToast(`已启用规则：${ruleName}`);
-      }
-      return next;
-    });
-  }
-
   function acknowledge(action: string) {
     setToast(action);
-  }
-
-  function openCreateKeyDialog() {
-    setKeyName("");
-    setCreatedSecret(null);
-    setKeyDialog({ mode: "create" });
-  }
-
-  function openEditKeyDialog(key: ManagedApiKey) {
-    setKeyName(key.name);
-    setCreatedSecret(null);
-    setKeyDialog({ mode: "edit", keyId: key.id });
-  }
-
-  function submitKeyDialog() {
-    const trimmedName = keyName.trim();
-
-    if (!trimmedName) {
-      acknowledge("请输入 API Key 名称");
-      return;
-    }
-
-    if (keyDialog?.mode === "edit") {
-      setManagedKeys((keys) => keys.map((key) => (key.id === keyDialog.keyId ? { ...key, name: trimmedName } : key)));
-      acknowledge("API Key 名称已更新");
-      setKeyDialog(null);
-      return;
-    }
-
-    const secret = generateApiKeySecret();
-    const record = createApiKeyRecord({
-      id: `key-${Date.now()}`,
-      name: trimmedName,
-      secret,
-      createdAt: new Date().toISOString().slice(0, 10)
-    });
-
-    setManagedKeys((keys) => [record, ...keys]);
-    setCreatedSecret(secret);
-    setKeyName(record.name);
-    acknowledge("API Key 已创建，请立即复制保存");
-  }
-
-  function deleteKey() {
-    if (!deleteTarget) return;
-
-    setManagedKeys((keys) => keys.filter((key) => key.id !== deleteTarget.id));
-    acknowledge(`${deleteTarget.name} 已删除`);
-    setDeleteTarget(null);
   }
 
   function copyValue(value: string, message: string) {
@@ -363,10 +318,19 @@ function FinOpsConsole() {
                   batchCost={batchCost}
                 />
                 <BillingQueue acknowledge={acknowledge} />
-                <MembersPanel />
+                <MembersPanel members={members} />
               </aside>
             </section>
           </>
+        )}
+
+        {section === "usage" && (
+          <UsagePage
+            members={members}
+            filteredMembers={filteredMembers}
+            onIncreaseMemberQuota={increaseMemberQuota}
+            acknowledge={acknowledge}
+          />
         )}
 
         {section === "keys" && (
@@ -381,7 +345,7 @@ function FinOpsConsole() {
           </section>
         )}
 
-        {section !== "overview" && section !== "keys" && <SectionPlaceholder section={section} />}
+        {section !== "overview" && section !== "usage" && section !== "keys" && <SectionPlaceholder section={section} />}
       </main>
 
       {drawer && (
@@ -492,22 +456,6 @@ function sectionLabel(section: Section) {
   return found?.label ?? "总览";
 }
 
-function generateApiKeySecret() {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = new Uint8Array(28);
-
-  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  const body = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
-  return `sk-${body}`;
-}
-
 function MetricCard({ icon: Icon, label, value, detail, tone }: { icon: typeof WalletCards; label: string; value: string; detail: string; tone: string }) {
   return (
     <article className={`metric ${tone}`}>
@@ -575,7 +523,7 @@ function GovernanceRules({ enabledRules, onToggle, onEdit }: { enabledRules: Set
         </button>
       </div>
       <div className="rule-list">
-        {rules.map((rule) => {
+        {governanceRules.map((rule) => {
           const enabled = enabledRules.has(rule.name);
           return (
             <div className="rule-row" key={rule.name}>
@@ -678,6 +626,134 @@ function ApiKeyTable({
   );
 }
 
+function UsagePage({
+  members,
+  filteredMembers,
+  onIncreaseMemberQuota,
+  acknowledge
+}: {
+  members: QuotaMember[];
+  filteredMembers: QuotaMember[];
+  onIncreaseMemberQuota: (memberId: string) => void;
+  acknowledge: (message: string) => void;
+}) {
+  const totalQuota = members.reduce((total, member) => total + member.quotaUsd, 0);
+  const totalSpend = members.reduce((total, member) => total + member.spend, 0);
+  const totalRequests = members.reduce((total, member) => total + member.requests, 0);
+  const availableQuota = totalQuota - totalSpend;
+  const watchedMembers = members.filter((member) => member.status !== "正常").length;
+  const usedRatio = totalQuota > 0 ? Math.round((totalSpend / totalQuota) * 100) : 0;
+
+  return (
+    <section className="single-page-layout usage-page">
+      <section className="summary-grid usage-summary-grid">
+        <MetricCard icon={WalletCards} label="总额度" value={formatCurrency(totalQuota)} detail={`${members.length} 个成员池`} tone="rose" />
+        <MetricCard icon={Gauge} label="已用额度" value={`${usedRatio}%`} detail={`${formatCurrency(totalSpend)} 已消耗`} tone="green" />
+        <MetricCard icon={Sparkles} label="剩余额度" value={formatCurrency(availableQuota)} detail="可继续分配" tone="teal" />
+        <MetricCard icon={UsersRound} label="关注成员" value={`${watchedMembers}`} detail={`${totalRequests.toLocaleString()} 次调用`} tone="amber" />
+      </section>
+
+      <section className="panel usage-control-panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Usage Control</p>
+            <h2>额度</h2>
+          </div>
+          <button className="primary-button" onClick={() => acknowledge("新增额度申请已加入审批队列")}>
+            <Plus size={16} />
+            新增额度
+          </button>
+        </div>
+        <div className="usage-control-grid">
+          <div className="quota-overview-card">
+            <div className="ring compact-ring" style={{ "--value": `${Math.min(usedRatio, 100)}` } as React.CSSProperties}>
+              <span>{usedRatio}%</span>
+            </div>
+            <div>
+              <h3>额度池健康度</h3>
+              <p>研发平台接近安全线，新增模型调用应优先走审批或低成本路由；个人池仍有余量，可以承接低风险实验流量。</p>
+            </div>
+          </div>
+          <div className="quota-policy-list" aria-label="额度策略">
+            <div>
+              <strong>自动预警</strong>
+              <span>成员额度达到 80% 时通知 Owner。</span>
+            </div>
+            <div>
+              <strong>申请审批</strong>
+              <span>高价模型或超过 $500 的额度调整进入审批。</span>
+            </div>
+            <div>
+              <strong>路由降本</strong>
+              <span>非生产任务优先切到成本优先路由。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel usage-table-panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Allocation</p>
+            <h2>额度分配</h2>
+          </div>
+          <span className="table-count">{filteredMembers.length} / {members.length}</span>
+        </div>
+        <div className="data-table quota-table">
+          <div className="table-head">
+            <span>成员</span>
+            <span>团队</span>
+            <span>额度使用</span>
+            <span>Token 占比</span>
+            <span>操作</span>
+          </div>
+          {filteredMembers.map((member) => (
+            <div className="table-row quota-row" key={member.id}>
+              <div className="key-cell">
+                <div className={`key-icon ${member.status === "关注" ? "risk" : ""}`}>
+                  <UserRoundCog size={16} />
+                </div>
+                <div>
+                  <strong>{member.name}</strong>
+                  <span>{member.role}</span>
+                </div>
+              </div>
+              <span>{member.team}</span>
+              <div className="quota-usage">
+                <div className="progress"><span style={{ width: `${member.quotaPercent}%` }} /></div>
+                <small>{formatCurrency(member.spend)} / {formatCurrency(member.quotaUsd)}</small>
+              </div>
+              <div className="quota-share">
+                <strong>{member.tokenShare}%</strong>
+                <span className={`status-pill ${quotaStatusTone(member.status)}`}>{member.status}</span>
+              </div>
+              <div className="row-actions">
+                <button className="ghost-button" onClick={() => onIncreaseMemberQuota(member.id)} aria-label={`提高 ${member.name} 额度`}>
+                  <ArrowDownUp size={16} />
+                  提额
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredMembers.length === 0 && (
+            <div className="empty-state">
+              <UsersRound size={18} />
+              <strong>没有匹配的额度成员</strong>
+              <span>调整搜索词，或新增额度申请。</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function quotaStatusTone(status: QuotaMember["status"]) {
+  if (status === "超限") return "danger";
+  if (status === "关注") return "watch";
+  return "healthy";
+}
+
 function SectionPlaceholder({ section }: { section: Section }) {
   return (
     <section className="single-page-layout">
@@ -778,7 +854,7 @@ function BillingQueue({ acknowledge }: { acknowledge: (message: string) => void 
   );
 }
 
-function MembersPanel() {
+function MembersPanel({ members }: { members: QuotaMember[] }) {
   return (
     <section className="panel">
       <div className="panel-head">
@@ -790,14 +866,14 @@ function MembersPanel() {
       </div>
       <div className="members">
         {members.map((member) => (
-          <div className="member-row" key={member.name}>
+          <div className="member-row" key={member.id}>
             <div>
               <strong>{member.name}</strong>
               <span>{member.team} / {member.role}</span>
             </div>
             <div>
-              <div className="progress"><span style={{ width: `${member.quota}%` }} /></div>
-              <small>{formatCurrency(member.spend)} / {member.quota}%</small>
+              <div className="progress"><span style={{ width: `${member.quotaPercent}%` }} /></div>
+              <small>{formatCurrency(member.spend)} / {formatCurrency(member.quotaUsd)}</small>
             </div>
           </div>
         ))}
